@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Казан-Мастер</string>
+    <string name="title_activity_main">Казан-Мастер</string>
+    <string name="package_name">com.kazanmaster.app</string>
+    <string name="custom_url_scheme">com.kazanmaster.app</string>
+</resources>

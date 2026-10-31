@@ -1,10 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Grain, Protein, GeneratedRecipe } from './types';
+import type { 
+  Grain, 
+  Protein, 
+  GeneratedRecipe, 
+  CalculationMode, 
+  UnitDisplayMode, 
+  SpiceStyle, 
+  FavoriteRecipe 
+} from './types';
 import { 
   getStoredGrains, 
   saveStoredGrains, 
   getStoredProteins, 
   saveStoredProteins,
+  getStoredFavorites,
+  saveStoredFavorites,
   resetStorageToDefaults 
 } from './utils/storage';
 import { generateRecipe } from './utils/recipeGenerator';
@@ -14,6 +24,8 @@ import { GrainSelector } from './components/GrainSelector';
 import { PortionControls } from './components/PortionControls';
 import { RecipeView } from './components/RecipeView';
 import { CookingAssistantModal } from './components/CookingAssistantModal';
+import { FloatingKitchenTimer } from './components/FloatingKitchenTimer';
+import { FavoritesModal } from './components/FavoritesModal';
 import { GrainsCheatSheet } from './components/GrainsCheatSheet';
 import { IngredientsManager } from './components/IngredientsManager';
 import { AddCustomModal } from './components/AddCustomModal';
@@ -25,20 +37,29 @@ export function App() {
   // Stored items
   const [grains, setGrains] = useState<Grain[]>(() => getStoredGrains());
   const [proteins, setProteins] = useState<Protein[]>(() => getStoredProteins());
+  const [favorites, setFavorites] = useState<FavoriteRecipe[]>(() => getStoredFavorites());
 
   // Form selections
   const [selectedProtein, setSelectedProtein] = useState<Protein>(() => proteins[0]);
   const [selectedGrains, setSelectedGrains] = useState<Grain[]>(() => {
-    // Default initial combo: Гречка + Красная чечевица
     const buckwheat = grains.find((g) => g.id === 'buckwheat');
     const redLentils = grains.find((g) => g.id === 'red_lentils');
     return [buckwheat, redLentils].filter(Boolean) as Grain[];
   });
+
+  // Calculation parameters
+  const [calculationMode, setCalculationMode] = useState<CalculationMode>('servings');
   const [servings, setServings] = useState<number>(3);
+  const [targetProteinGrams, setTargetProteinGrams] = useState<number>(400);
+  const [targetGrainGrams, setTargetGrainGrams] = useState<number>(240);
+  const [unitDisplayMode, setUnitDisplayMode] = useState<UnitDisplayMode>('both');
+  const [spiceStyle, setSpiceStyle] = useState<SpiceStyle>('classic');
+  const [cannedLegumes, setCannedLegumes] = useState<boolean>(false);
 
   // Recipe result
   const [recipe, setRecipe] = useState<GeneratedRecipe | null>(null);
   const [isCookingAssistantOpen, setIsCookingAssistantOpen] = useState(false);
+  const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
 
   // Quick Add Modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -46,7 +67,7 @@ export function App() {
 
   const recipeRef = useRef<HTMLDivElement | null>(null);
 
-  // Save changes to storage
+  // Storage sync
   useEffect(() => {
     saveStoredGrains(grains);
   }, [grains]);
@@ -54,6 +75,10 @@ export function App() {
   useEffect(() => {
     saveStoredProteins(proteins);
   }, [proteins]);
+
+  useEffect(() => {
+    saveStoredFavorites(favorites);
+  }, [favorites]);
 
   // Toggle grain selection (max 4)
   const handleToggleGrain = (grain: Grain) => {
@@ -83,15 +108,12 @@ export function App() {
 
     if (pool.length === 0) pool = [...grains];
 
-    // Shuffle
     const shuffled = [...pool].sort(() => 0.5 - Math.random());
-    // Pick 2, 3 or 4 grains
-    const count = Math.min(pool.length, Math.floor(Math.random() * 3) + 2); // 2 to 4
+    const count = Math.min(pool.length, Math.floor(Math.random() * 3) + 2);
     const picked = shuffled.slice(0, count);
 
     setSelectedGrains(picked);
 
-    // Minor celebration
     confetti({
       particleCount: 25,
       spread: 40,
@@ -102,10 +124,16 @@ export function App() {
   // Generate Recipe
   const handleGenerateRecipe = () => {
     if (selectedGrains.length === 0) return;
-    const generated = generateRecipe(selectedProtein, selectedGrains, servings);
+    const generated = generateRecipe(selectedProtein, selectedGrains, {
+      calculationMode,
+      servings,
+      targetProteinGrams,
+      targetGrainGrams,
+      spiceStyle,
+      cannedLegumes
+    });
     setRecipe(generated);
 
-    // Scroll to recipe
     setTimeout(() => {
       recipeRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -114,10 +142,66 @@ export function App() {
   // Auto-update recipe if already visible and parameters change
   useEffect(() => {
     if (recipe && selectedGrains.length > 0) {
-      const updated = generateRecipe(selectedProtein, selectedGrains, servings);
+      const updated = generateRecipe(selectedProtein, selectedGrains, {
+        calculationMode,
+        servings,
+        targetProteinGrams,
+        targetGrainGrams,
+        spiceStyle,
+        cannedLegumes
+      });
       setRecipe(updated);
     }
-  }, [selectedProtein, selectedGrains, servings]);
+  }, [
+    selectedProtein, 
+    selectedGrains, 
+    servings, 
+    calculationMode, 
+    targetProteinGrams, 
+    targetGrainGrams, 
+    spiceStyle, 
+    cannedLegumes
+  ]);
+
+  // Save Favorite
+  const handleSaveFavorite = (rec: GeneratedRecipe) => {
+    const newFav: FavoriteRecipe = {
+      id: `fav_${Date.now()}`,
+      title: rec.title,
+      createdAt: new Date().toLocaleDateString('ru-RU'),
+      proteinId: selectedProtein.id,
+      grainIds: selectedGrains.map((g) => g.id),
+      servings: rec.servings,
+      calculationMode,
+      targetInputWeight: rec.targetInputWeight,
+      spiceStyle
+    };
+    setFavorites((prev) => [newFav, ...prev.filter((f) => f.title !== rec.title)]);
+  };
+
+  // Load Favorite into Constructor
+  const handleLoadFavorite = (fav: FavoriteRecipe) => {
+    const foundProtein = proteins.find((p) => p.id === fav.proteinId);
+    if (foundProtein) setSelectedProtein(foundProtein);
+
+    const foundGrains = fav.grainIds
+      .map((id) => grains.find((g) => g.id === id))
+      .filter(Boolean) as Grain[];
+    if (foundGrains.length > 0) setSelectedGrains(foundGrains);
+
+    setServings(fav.servings);
+    setCalculationMode(fav.calculationMode);
+    if (fav.targetInputWeight) {
+      if (fav.calculationMode === 'by_protein') setTargetProteinGrams(fav.targetInputWeight);
+      if (fav.calculationMode === 'by_grain') setTargetGrainGrams(fav.targetInputWeight);
+    }
+    setSpiceStyle(fav.spiceStyle);
+    setActiveTab('constructor');
+  };
+
+  const handleDeleteFavorite = (id: string) => {
+    setFavorites((prev) => prev.filter((f) => f.id !== id));
+  };
 
   // Add custom grain
   const handleAddGrain = (newGrainData: Omit<Grain, 'id'>) => {
@@ -126,19 +210,16 @@ export function App() {
       id: `custom_${Date.now()}`
     };
     setGrains((prev) => [newGrain, ...prev]);
-    // Also select it if space allows
     if (selectedGrains.length < 4) {
       setSelectedGrains((prev) => [...prev, newGrain]);
     }
   };
 
-  // Delete grain
   const handleDeleteGrain = (id: string) => {
     setGrains((prev) => prev.filter((g) => g.id !== id));
     setSelectedGrains((prev) => prev.filter((g) => g.id !== id));
   };
 
-  // Add custom protein
   const handleAddProtein = (newProteinData: Omit<Protein, 'id'>) => {
     const newProtein: Protein = {
       ...newProteinData,
@@ -148,7 +229,6 @@ export function App() {
     setSelectedProtein(newProtein);
   };
 
-  // Delete protein
   const handleDeleteProtein = (id: string) => {
     setProteins((prev) => prev.filter((p) => p.id !== id));
     if (selectedProtein.id === id) {
@@ -156,22 +236,23 @@ export function App() {
     }
   };
 
-  // Reset defaults
   const handleResetDefaults = () => {
     const { grains: defGrains, proteins: defProteins } = resetStorageToDefaults();
     setGrains(defGrains);
     setProteins(defProteins);
     setSelectedProtein(defProteins[0]);
-    setSelectedGrains([defGrains[0], defGrains[4]]); // buckwheat + red lentils
+    setSelectedGrains([defGrains[0], defGrains[4]]);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans selection:bg-amber-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans selection:bg-amber-500 selection:text-white pb-16">
       {/* Top Navigation */}
       <Navbar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         hasRecipe={!!recipe} 
+        favoritesCount={favorites.length}
+        onOpenFavorites={() => setIsFavoritesOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -201,10 +282,22 @@ export function App() {
               }}
             />
 
-            {/* Step 3: Portion Controls & Quick Calculate */}
+            {/* Step 3: Portion Controls & Kitchen Measure Settings */}
             <PortionControls
+              calculationMode={calculationMode}
+              setCalculationMode={setCalculationMode}
               servings={servings}
               setServings={setServings}
+              targetProteinGrams={targetProteinGrams}
+              setTargetProteinGrams={setTargetProteinGrams}
+              targetGrainGrams={targetGrainGrams}
+              setTargetGrainGrams={setTargetGrainGrams}
+              unitDisplayMode={unitDisplayMode}
+              setUnitDisplayMode={setUnitDisplayMode}
+              spiceStyle={spiceStyle}
+              setSpiceStyle={setSpiceStyle}
+              cannedLegumes={cannedLegumes}
+              setCannedLegumes={setCannedLegumes}
               selectedProtein={selectedProtein}
               selectedGrains={selectedGrains}
               onGenerate={handleGenerateRecipe}
@@ -215,7 +308,11 @@ export function App() {
               <div ref={recipeRef} className="pt-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
                 <RecipeView
                   recipe={recipe}
+                  unitDisplayMode={unitDisplayMode}
+                  setUnitDisplayMode={setUnitDisplayMode}
                   onStartCookingAssistant={() => setIsCookingAssistantOpen(true)}
+                  onSaveFavorite={handleSaveFavorite}
+                  isSaved={favorites.some((f) => f.title === recipe.title)}
                 />
               </div>
             )}
@@ -239,11 +336,26 @@ export function App() {
         )}
       </main>
 
+      {/* Floating Kitchen Timer (Always available anywhere in app) */}
+      <FloatingKitchenTimer />
+
       {/* Interactive Cooking Assistant Modal */}
       {isCookingAssistantOpen && recipe && (
         <CookingAssistantModal
           recipe={recipe}
           onClose={() => setIsCookingAssistantOpen(false)}
+        />
+      )}
+
+      {/* Favorites Modal */}
+      {isFavoritesOpen && (
+        <FavoritesModal
+          favorites={favorites}
+          grains={grains}
+          proteins={proteins}
+          onClose={() => setIsFavoritesOpen(false)}
+          onLoadFavorite={handleLoadFavorite}
+          onDeleteFavorite={handleDeleteFavorite}
         />
       )}
 

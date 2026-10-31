@@ -1,8 +1,9 @@
 import { DEFAULT_GRAINS, DEFAULT_PROTEINS } from '../data/defaults';
-import type { Grain, Protein } from '../types';
+import type { Grain, Protein, FavoriteRecipe } from '../types';
 
 const GRAINS_KEY = 'kazan_calculator_grains_v1';
 const PROTEINS_KEY = 'kazan_calculator_proteins_v1';
+const FAVORITES_KEY = 'kazan_calculator_favorites_v1';
 
 export function getStoredGrains(): Grain[] {
   try {
@@ -45,6 +46,26 @@ export function saveStoredProteins(proteins: Protein[]) {
     localStorage.setItem(PROTEINS_KEY, JSON.stringify(proteins));
   } catch (e) {
     console.error('Failed to save proteins to storage', e);
+  }
+}
+
+export function getStoredFavorites(): FavoriteRecipe[] {
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+  } catch (e) {
+    console.error('Failed to load favorites', e);
+  }
+  return [];
+}
+
+export function saveStoredFavorites(favs: FavoriteRecipe[]) {
+  try {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
+  } catch (e) {
+    console.error('Failed to save favorites', e);
   }
 }
 

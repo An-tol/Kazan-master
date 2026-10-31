@@ -1,26 +1,22 @@
 @echo off
-chcp 65001 >nul
-title Отправка проекта на GitHub
+cls
 echo ========================================================
-echo Отправка приложения Казан-Мастер в репозиторий:
-echo https://github.com/An-tol/Kazan-master
+echo   Pushing Kazan-Master to GitHub (An-tol/Kazan-master)
 echo ========================================================
 echo.
-echo Если сейчас откроется окно браузера - просто нажмите "Sign in with your browser" (Авторизоваться).
+echo If your browser opens a GitHub login window, please click "Authorize".
 echo.
 git push -u origin main
 echo.
 if %ERRORLEVEL% EQU 0 (
     echo ========================================================
-    echo УСПЕХ! Проект успешно отправлен на GitHub!
-    echo.
-    echo Сейчас откроется страница Actions:
-    echo https://github.com/An-tol/Kazan-master/actions
-    echo Там уже началась автоматическая сборка вашего APK-файла!
+    echo   SUCCESS! Uploaded to GitHub!
+    echo   Opening Actions page in browser...
     echo ========================================================
     start https://github.com/An-tol/Kazan-master/actions
 ) else (
     echo.
-    echo Произошла ошибка при отправке.
+    echo Something went wrong with git push.
 )
+echo.
 pause
